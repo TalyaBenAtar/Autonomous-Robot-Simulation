@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.8)
 project(robot_controller)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -11,6 +14,24 @@ find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+
+
+# Build the status publisher node
+add_executable(status_publisher src/status_publisher.cpp)
+
+# Link the required ROS 2 dependencies
+ament_target_dependencies(status_publisher
+  rclcpp
+  std_msgs
+)
+
+# Make the executable discoverable by ros2 run
+install(TARGETS
+  status_publisher
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
