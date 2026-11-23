@@ -17,8 +17,10 @@ find_package(nav_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
 
-# Build the status publisher node
+# Build the status publisher and subscriber nodes
 add_executable(status_publisher src/status_publisher.cpp)
+add_executable(status_subscriber src/status_subscriber.cpp)
+add_executable(movement_controller src/movement_controller.cpp)
 
 # Link the required ROS 2 dependencies
 ament_target_dependencies(status_publisher
@@ -26,9 +28,22 @@ ament_target_dependencies(status_publisher
   std_msgs
 )
 
+ament_target_dependencies(status_subscriber
+  rclcpp
+  std_msgs
+)
+
+ament_target_dependencies(movement_controller
+  rclcpp
+  geometry_msgs
+  nav_msgs
+)
+
 # Make the executable discoverable by ros2 run
 install(TARGETS
   status_publisher
+  status_subscriber
+  movement_controller
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -44,5 +59,10 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
 
 ament_package()
