@@ -1,4 +1,3 @@
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -57,9 +56,13 @@ private:
     };
 
     // Target trajectory parameters.
-    static constexpr double SIDE_LENGTH = 1.0;  // meters
+    static constexpr double SIDE_LENGTH = 1.0; // meters
     static constexpr double TURN_ANGLE = 1.57079632679; // 90 degrees
     static constexpr int TOTAL_SIDES = 4;
+
+    // Movement accuracy tolerances.
+    static constexpr double DISTANCE_TOLERANCE = 0.005; // 5 mm
+    static constexpr double ANGLE_TOLERANCE = 0.005; // ~0.29 degrees
 
     // Normalize angles to [-pi, pi] to handle wraparound.
     double normalizeAngle(double angle)
@@ -108,11 +111,11 @@ private:
 
                 double remaining = SIDE_LENGTH - distance;
 
-                if (remaining > 0.02)
+                if (remaining > DISTANCE_TOLERANCE)
                 {
                     // Slow down near the end of each side.
                     command.linear.x =
-                        std::clamp(remaining * 0.8, 0.05, 0.2);
+                        std::clamp(remaining * 0.8, 0.01, 0.2);
                 }
                 else
                 {
@@ -136,11 +139,11 @@ private:
 
                 double remaining = TURN_ANGLE - turned;
 
-                if (remaining > 0.03)
+                if (remaining > ANGLE_TOLERANCE)
                 {
                     // Reduce angular velocity as we approach 90 degrees.
                     command.angular.z =
-                        std::clamp(remaining * 1.0, 0.1, 0.5);
+                        std::clamp(remaining * 1.0, 0.01, 0.5);
                 }
                 else
                 {

@@ -128,6 +128,31 @@
     <origin xyz="-0.15 0 -0.08"/>
   </joint>
 
+  <!-- IMU sensor mounted at the center of the chassis -->
+  <gazebo reference="base_link">
+    <sensor name="imu_sensor" type="imu">
+
+      <pose>0 0 0 0 0 0</pose>
+
+      <always_on>true</always_on>
+      <update_rate>50</update_rate>
+
+      <topic>/imu</topic>
+
+      <imu>
+        <enable_orientation>true</enable_orientation>
+      </imu>
+
+    </sensor>
+  </gazebo>
+
+  <!-- Gazebo IMU simulation system -->
+  <gazebo>
+    <plugin
+      filename="gz-sim-imu-system"
+      name="gz::sim::systems::Imu">
+    </plugin>
+  </gazebo>
 
   <!-- Gazebo differential-drive controller -->
   <gazebo>
@@ -148,6 +173,5 @@
 
     </plugin>
   </gazebo>
-
 
 </robot>
