@@ -19,9 +19,21 @@ def generate_launch_description():
 
     robot_description = xacro.process_file(xacro_file).toxml()
 
+    # Publish transformations between robot links
+    state_publisher = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
+        parameters=[{
+            'robot_description': robot_description,
+            'use_sim_time': True
+        }],
+        output='screen'
+    )
+
     # Start Gazebo
     gazebo = ExecuteProcess(
-        cmd=['gz', 'sim', '-r', 'empty.sdf'],
+        cmd=['gz', 'sim', '-v', '4', '-r', 'empty.sdf'],
         output='screen'
     )
 
@@ -42,10 +54,13 @@ def generate_launch_description():
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
+        name='gazebo_bridge',
         arguments=[
             '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
             '/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry',
-            '/imu@sensor_msgs/msg/Imu[gz.msgs.IMU'
+            '/imu@sensor_msgs/msg/Imu[gz.msgs.IMU',
+            '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
+            '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model'
         ],
         output='screen'
     )
@@ -54,6 +69,7 @@ def generate_launch_description():
     controller = Node(
         package='robot_controller',
         executable='movement_controller',
+        parameters=[{'use_sim_time': True}],
         output='screen'
     )
 
@@ -68,6 +84,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         gazebo,
+        state_publisher,
         bridge,
         start_controller,
         spawn_robot
