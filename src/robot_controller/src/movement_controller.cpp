@@ -9,8 +9,8 @@
 
 using namespace std::chrono_literals;
 
-// Controls a differential-drive robot along a square trajectory.
-// Uses odometry feedback instead of fixed movement durations.
+// Controls a differential-drive robot along a repeating square trajectory.
+// Uses raw odometry feedback and waits for EKF initialization before moving.
 class MovementController : public rclcpp::Node
 {
 public:
@@ -20,7 +20,7 @@ public:
         publisher_ = create_publisher<geometry_msgs::msg::Twist>(
             "/cmd_vel", 10);
 
-        // Subscribe to estimated robot position and orientation.
+        // Subscribe to raw wheel odometry.
         odom_subscriber_ = create_subscription<nav_msgs::msg::Odometry>(
             "/odom", 10,
             [this](nav_msgs::msg::Odometry::SharedPtr msg)
@@ -39,20 +39,37 @@ public:
                 has_odometry_ = true;
             });
 
+        // Wait for the EKF to initialize before allowing movement.
+        filtered_odom_subscriber_ =
+            create_subscription<nav_msgs::msg::Odometry>(
+                "/odometry/filtered", 10,
+                [this](nav_msgs::msg::Odometry::ConstSharedPtr)
+                {
+                    if (!has_filtered_odometry_)
+                    {
+                        has_filtered_odometry_ = true;
+
+                        RCLCPP_INFO(
+                            get_logger(),
+                            "EKF ready. Movement enabled.");
+                    }
+                });
+
         // Execute the feedback controller approximately 10 times/sec.
         timer_ = create_wall_timer(
             100ms,
             [this]() { controlLoop(); });
 
-        RCLCPP_INFO(get_logger(), "Square movement controller started");
+        RCLCPP_INFO(
+            get_logger(),
+            "Square movement controller started. Waiting for odometry and EKF.");
     }
 
 private:
     enum class State
     {
         MOVING_FORWARD,
-        TURNING,
-        STOPPED
+        TURNING
     };
 
     // Target trajectory parameters.
@@ -63,6 +80,16 @@ private:
     // Movement accuracy tolerances.
     static constexpr double DISTANCE_TOLERANCE = 0.005; // 5 mm
     static constexpr double ANGLE_TOLERANCE = 0.005; // ~0.29 degrees
+
+    // Movement speed limits.
+    static constexpr double MAX_LINEAR_SPEED = 0.4; // m/s
+    static constexpr double MAX_ANGULAR_SPEED = 1.0; // rad/s
+    static constexpr double MIN_LINEAR_SPEED = 0.01; // m/s
+    static constexpr double MIN_ANGULAR_SPEED = 0.01; // rad/s
+
+    // Proportional control gains.
+    static constexpr double LINEAR_GAIN = 1.2;
+    static constexpr double ANGULAR_GAIN = 1.5;
 
     // Normalize angles to [-pi, pi] to handle wraparound.
     double normalizeAngle(double angle)
@@ -82,22 +109,26 @@ private:
     {
         geometry_msgs::msg::Twist command;
 
-        // Don't move until valid odometry has been received.
-        if (!has_odometry_)
+        // Wait for both raw odometry and EKF initialization.
+        if (!has_odometry_ || !has_filtered_odometry_)
         {
             publisher_->publish(command);
             return;
         }
 
-        // Initialize the first side from the robot's current pose.
+        // Initialize the first square from the robot's current pose.
         if (!initialized_)
         {
             saveStartPose();
+
             initial_x_ = current_x_;
             initial_y_ = current_y_;
+
             initialized_ = true;
 
-            RCLCPP_INFO(get_logger(), "Starting square trajectory");
+            RCLCPP_INFO(
+                get_logger(),
+                "Starting square trajectory");
         }
 
         switch (state_)
@@ -114,8 +145,10 @@ private:
                 if (remaining > DISTANCE_TOLERANCE)
                 {
                     // Slow down near the end of each side.
-                    command.linear.x =
-                        std::clamp(remaining * 0.8, 0.01, 0.2);
+                    command.linear.x = std::clamp(
+                        remaining * LINEAR_GAIN,
+                        MIN_LINEAR_SPEED,
+                        MAX_LINEAR_SPEED);
                 }
                 else
                 {
@@ -125,9 +158,12 @@ private:
 
                     RCLCPP_INFO(
                         get_logger(),
-                        "Side %d completed. Distance: %.3f m",
-                        completed_sides_ + 1, distance);
+                        "Square %d, Side %d completed. Distance: %.3f m",
+                        completed_squares_ + 1,
+                        completed_sides_ + 1,
+                        distance);
                 }
+
                 break;
             }
 
@@ -142,8 +178,10 @@ private:
                 if (remaining > ANGLE_TOLERANCE)
                 {
                     // Reduce angular velocity as we approach 90 degrees.
-                    command.angular.z =
-                        std::clamp(remaining * 1.0, 0.01, 0.5);
+                    command.angular.z = std::clamp(
+                        remaining * ANGULAR_GAIN,
+                        MIN_ANGULAR_SPEED,
+                        MAX_ANGULAR_SPEED);
                 }
                 else
                 {
@@ -151,52 +189,68 @@ private:
 
                     RCLCPP_INFO(
                         get_logger(),
-                        "Turn %d completed. Angle: %.2f degrees",
+                        "Square %d, Turn %d completed. Angle: %.2f degrees",
+                        completed_squares_ + 1,
                         completed_sides_,
                         turned * 180.0 / 3.141592653589793);
 
                     if (completed_sides_ >= TOTAL_SIDES)
                     {
-                        // All four sides and turns are complete.
-                        state_ = State::STOPPED;
+                        completed_squares_++;
 
+                        // Calculate position error relative to the
+                        // beginning of the completed square.
                         double final_error = std::hypot(
                             current_x_ - initial_x_,
                             current_y_ - initial_y_);
 
                         RCLCPP_INFO(
                             get_logger(),
-                            "Square completed! Position error: %.3f m",
+                            "Square %d completed! Position error: %.3f m",
+                            completed_squares_,
                             final_error);
+
+                        // Reset the reference for the next square.
+                        completed_sides_ = 0;
+                        initial_x_ = current_x_;
+                        initial_y_ = current_y_;
+
+                        RCLCPP_INFO(
+                            get_logger(),
+                            "Starting square %d",
+                            completed_squares_ + 1);
                     }
-                    else
-                    {
-                        // Begin the next side from the current pose.
-                        saveStartPose();
-                        state_ = State::MOVING_FORWARD;
-                    }
+
+                    // Begin the next side from the current pose.
+                    saveStartPose();
+                    state_ = State::MOVING_FORWARD;
                 }
+
                 break;
             }
-
-            case State::STOPPED:
-                // Keep publishing zero velocity.
-                break;
         }
 
         publisher_->publish(command);
     }
 
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscriber_;
+
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr
+        odom_subscriber_;
+
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr
+        filtered_odom_subscriber_;
+
     rclcpp::TimerBase::SharedPtr timer_;
 
     State state_ = State::MOVING_FORWARD;
 
     bool has_odometry_ = false;
+    bool has_filtered_odometry_ = false;
     bool initialized_ = false;
 
     int completed_sides_ = 0;
+    int completed_squares_ = 0;
 
     double current_x_ = 0.0;
     double current_y_ = 0.0;
@@ -215,5 +269,6 @@ int main(int argc, char **argv)
     rclcpp::init(argc, argv);
     rclcpp::spin(std::make_shared<MovementController>());
     rclcpp::shutdown();
+
     return 0;
 }

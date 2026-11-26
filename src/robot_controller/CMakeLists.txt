@@ -21,6 +21,7 @@ find_package(std_msgs REQUIRED)
 add_executable(status_publisher src/status_publisher.cpp)
 add_executable(status_subscriber src/status_subscriber.cpp)
 add_executable(movement_controller src/movement_controller.cpp)
+add_executable(odom_covariance src/odom_covariance.cpp)
 
 # Link the required ROS 2 dependencies
 ament_target_dependencies(status_publisher
@@ -39,11 +40,17 @@ ament_target_dependencies(movement_controller
   nav_msgs
 )
 
+ament_target_dependencies(odom_covariance
+  rclcpp
+  nav_msgs
+)
+
 # Make the executable discoverable by ros2 run
 install(TARGETS
   status_publisher
   status_subscriber
   movement_controller
+  odom_covariance
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -61,7 +68,7 @@ if(BUILD_TESTING)
 endif()
 
 install(
-  DIRECTORY launch description
+  DIRECTORY launch description config
   DESTINATION share/${PROJECT_NAME}
 )
 

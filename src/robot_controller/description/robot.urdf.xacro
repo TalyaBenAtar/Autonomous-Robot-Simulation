@@ -128,23 +128,75 @@
     <origin xyz="-0.15 0 -0.08"/>
   </joint>
 
-  <!-- IMU sensor mounted at the center of the chassis -->
-  <gazebo reference="base_link">
-    <sensor name="imu_sensor" type="imu">
+<!-- IMU coordinate frame -->
+<link name="imu_link"/>
 
-      <pose>0 0 0 0 0 0</pose>
+<joint name="imu_joint" type="fixed">
+  <parent link="base_link"/>
+  <child link="imu_link"/>
+  <origin xyz="0 0 0" rpy="0 0 0"/>
+</joint>
 
-      <always_on>true</always_on>
-      <update_rate>50</update_rate>
+<!-- IMU sensor mounted at the center of the chassis -->
+<gazebo reference="base_link">
+  <sensor name="imu_sensor" type="imu">
 
-      <topic>/imu</topic>
+    <pose>0 0 0 0 0 0</pose>
 
-      <imu>
-        <enable_orientation>true</enable_orientation>
-      </imu>
+    <always_on>true</always_on>
+    <update_rate>50</update_rate>
 
-    </sensor>
-  </gazebo>
+    <topic>/imu</topic>
+    <gz_frame_id>imu_link</gz_frame_id>
+
+    <imu>
+  <enable_orientation>true</enable_orientation>
+
+  <angular_velocity>
+    <x>
+      <noise type="gaussian">
+        <mean>0.0</mean>
+        <stddev>0.01</stddev>
+      </noise>
+    </x>
+    <y>
+      <noise type="gaussian">
+        <mean>0.0</mean>
+        <stddev>0.01</stddev>
+      </noise>
+    </y>
+    <z>
+      <noise type="gaussian">
+        <mean>0.0</mean>
+        <stddev>0.01</stddev>
+      </noise>
+    </z>
+  </angular_velocity>
+
+  <linear_acceleration>
+    <x>
+      <noise type="gaussian">
+        <mean>0.0</mean>
+        <stddev>0.05</stddev>
+      </noise>
+    </x>
+    <y>
+      <noise type="gaussian">
+        <mean>0.0</mean>
+        <stddev>0.05</stddev>
+      </noise>
+    </y>
+    <z>
+      <noise type="gaussian">
+        <mean>0.0</mean>
+        <stddev>0.05</stddev>
+      </noise>
+    </z>
+  </linear_acceleration>
+</imu>
+
+  </sensor>
+</gazebo>
 
   <!-- Gazebo IMU simulation system -->
   <gazebo>

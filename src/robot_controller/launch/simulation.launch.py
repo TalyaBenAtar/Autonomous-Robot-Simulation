@@ -11,6 +11,13 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
 
     package_dir = get_package_share_directory('robot_controller')
+    ekf_config = os.path.join(
+        package_dir, 'config', 'ekf.yaml'
+    )
+
+    rviz_config = os.path.join(
+        package_dir, 'config', 'robot.rviz'
+    )
 
     # Generate the robot description from Xacro
     xacro_file = os.path.join(
@@ -65,6 +72,32 @@ def generate_launch_description():
         output='screen'
     )
 
+        # Add covariance to wheel odometry
+    odom_covariance = Node(
+        package='robot_controller',
+        executable='odom_covariance',
+        parameters=[{'use_sim_time': True}],
+        output='screen'
+    )
+
+    # Fuse wheel odometry and IMU measurements
+    ekf = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        name='ekf_filter_node',
+        parameters=[ekf_config],
+        output='screen'
+    )
+
+    # Visualize the robot and coordinate frames
+    rviz = Node(
+        package='rviz2',
+        executable='rviz2',
+        arguments=['-d', rviz_config],
+        parameters=[{'use_sim_time': True}],
+        output='screen'
+    )
+
     # Autonomous movement controller
     controller = Node(
         package='robot_controller',
@@ -86,6 +119,9 @@ def generate_launch_description():
         gazebo,
         state_publisher,
         bridge,
+        odom_covariance,
+        ekf,
+        rviz,
         start_controller,
         spawn_robot
     ])
